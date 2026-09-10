@@ -463,9 +463,20 @@ export class OAuthProvider {
     }
 
     // A document is public by construction, so it cannot carry a shared
-    // secret and cannot ask to authenticate with one.
-    const method = doc.token_endpoint_auth_method ?? 'none';
-    if (method !== 'none') invalid('may only use token_endpoint_auth_method "none"');
+    // secret. During the CIMD transition, clients such as ChatGPT may publish
+    // a legacy singular preference (for example private_key_jwt) alongside a
+    // plural list of supported methods. Select public-client authentication
+    // whenever "none" is supported rather than treating the legacy preference
+    // as binding.
+    const supportedMethods = Array.isArray(doc.token_endpoint_auth_methods_supported)
+      ? doc.token_endpoint_auth_methods_supported
+      : [];
+    const supportsNone =
+      supportedMethods.includes('none') ||
+      (supportedMethods.length === 0 && (doc.token_endpoint_auth_method ?? 'none') === 'none');
+    if (!supportsNone) {
+      invalid('must support token endpoint authentication method "none"');
+    }
     if ('client_secret' in doc || 'client_secret_expires_at' in doc) {
       invalid('must not carry a client_secret');
     }
